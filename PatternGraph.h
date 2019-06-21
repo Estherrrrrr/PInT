@@ -24,12 +24,12 @@ class PatternCodeRegion;
  */
 class PatternGraphNode {
 public:
-	/** 
+	/**
  	* This enum is needed for LLVM type checking. New classes inheriting from this class should add their own enum values here.
  	*/
-	enum GraphNodeKind 
+	enum GraphNodeKind
 	{
-		GNK_FnCall, 
+		GNK_FnCall,
 		GNK_Pattern
 	};
 
@@ -75,20 +75,38 @@ public:
 	FunctionNode (std::string Name, unsigned Hash);
 
 	void AddChild(PatternGraphNode* Child);
-	
+
 	void AddParent(PatternGraphNode* Parent);
+
+	void AddPatternParent(PatternGraphNode* PatParent);
+
+	void AddPatternParents(std::vector<PatternCodeRegion*> PatternParents);
+
+	void AddPatternChild(PatternGraphNode* PatChild);
+
+	std::vector<PatternCodeRegion*> GetPatternParents();
+
+	std::vector<PatternCodeRegion*> GetPatternChildren();
+
+	bool HasNoPatternParents();
+
+	bool HasNoPatternChildren();
+
+	void registerPatChildrenToPatParents();
+	
+	void PrintVecOfPattern(std::vector<PatternCodeRegion*> RegionVec);
 
 	std::vector<PatternGraphNode*> GetChildren()
 	{
 		return Children;
-	}	
+	}
 
 	std::vector<PatternGraphNode*> GetParents()
 	{
 		return Parents;
 	}
 
-	unsigned GetHash() 
+	unsigned GetHash()
 	{
 		return Hash;
 	}
@@ -102,10 +120,14 @@ public:
 	{
 		return Node->GetKind() == PatternGraphNode::GNK_FnCall;
 	}
-	
+
 private:
 	std::string FnName;
 	unsigned Hash;
+	// we need only one Parents to trace down the reletion chip of the patterns through different Functions
+
+	std::vector<PatternCodeRegion*> PatternParents;
+	std::vector<PatternCodeRegion*> PatternChildren;
 
 	std::vector<PatternGraphNode*> Children;
 	std::vector<PatternGraphNode*> Parents;
@@ -117,16 +139,16 @@ class PatternGraph
 {
 public:
 	PatternGraphNode* GetRootNode();
-
+	std::vector<PatternGraphNode*> GetOnlyPatternRootNodes();
 	/* Access to patterns */
 	bool RegisterPattern(HPCParallelPattern* Pattern);
 
 	HPCParallelPattern* GetPattern(DesignSpace DesignSp, std::string Name);
 
 	/**
-	 * @brief 
+	 * @brief
 	 *
-	 * @return All patterns registered in the graph. 
+	 * @return All patterns registered in the graph.
 	 **/
 	std::vector<HPCParallelPattern*> GetAllPatterns() { return Patterns; }
 
@@ -137,14 +159,14 @@ public:
 	PatternOccurrence* GetPatternOccurrence(std::string ID);
 
 	/**
-	 * @brief 
+	 * @brief
 	 *
 	 * @return All pattern occurrences registered in the graph.
 	 **/
 	std::vector<PatternOccurrence*> GetAllPatternOccurrence() { return PatternOccurrences; }
 
 	std::vector<PatternCodeRegion*> GetAllPatternCodeRegions();
-	
+
 	/* Access to functions */
 	bool RegisterFunction(clang::FunctionDecl* Decl);
 
@@ -152,9 +174,10 @@ public:
 
 	FunctionNode* GetFunctionNode(std::string Name);
 
+	void RegisterOnlyPatternRootNode(PatternCodeRegion* CodeReg);
 
 	/**
-	 * @brief 
+	 * @brief
 	 *
 	 * @return All functions registered in the graph.
 	 **/
@@ -180,6 +203,8 @@ private:
 
 	/* Designated root node for output in "Treeifyed" display */
 	PatternGraphNode* RootNode;
+	/* When using the OnlyPattern flag we can have multiple rootPatterns*/
+	std::vector<PatternGraphNode*> OnlyPatternRootNodes;
 
 	/* Prevent object creation */
 	PatternGraph();

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <stack>
+#include <queue>
 #include "clang/AST/Decl.h"
 #include "llvm/Support/Casting.h"
 
@@ -26,30 +27,36 @@ class HPCParallelPattern
 {
 public:
 	HPCParallelPattern(DesignSpace DesignSp, std::string PatternName);
-	
+
 	void Print();
 
 	void PrintShort();
 
 	void AddOccurrence(PatternOccurrence* Occurrence);
 
-	std::vector<PatternOccurrence*> GetOccurrences() { return this->Occurrences; }
+	std::vector<PatternOccurrence*> GetOccurrences();
 
 	std::vector<PatternCodeRegion*> GetCodeRegions();
-	
+
 	std::string GetPatternName() { return this->PatternName; }
 
 	std::string GetDesignSpaceStr() { return DesignSpaceToStr(this->DesignSp); }
 
 	DesignSpace GetDesignSpace() { return DesignSp; }
-	
+
 	int GetTotalLinesOfCode();
 
 	bool Equals(HPCParallelPattern* Pattern);
 
-private:	
+	void incrementNumOfOperators();
+
+	int GetNumOfOperators();
+
+private:
 	DesignSpace DesignSp;
 	std::string PatternName;
+
+	int numOfOperators = 0;
 
 	std::vector<PatternOccurrence*> Occurrences;
 };
@@ -82,16 +89,14 @@ public:
 	int GetNumberOfCodeRegions() { return this->CodeRegions.size(); }
 
 	bool Equals(PatternOccurrence* PatternOcc);
-	
+
 private:
 	HPCParallelPattern* Pattern;
 
 	std::vector<PatternCodeRegion*> CodeRegions;
-	
+
 	std::string ID;
 };
-
-
 
 /**
  * This class represents a block of code that is enclosed with the instrumentation calls.
@@ -116,36 +121,80 @@ public:
 
 	void AddParent(PatternGraphNode* Parent);
 
+	void AddOnlyPatternChild(PatternGraphNode* PatChild);
+
+	void AddOnlyPatternParent(PatternGraphNode* PatParent);
+
 	std::vector<PatternGraphNode*> GetChildren() { return this->Children; }
 
+	std::vector<PatternCodeRegion*> GetOnlyPatternChildren() { return this->PatternChildren; }
+
 	std::vector<PatternGraphNode*> GetParents() { return this->Parents; }
+
+	std::vector<PatternCodeRegion*> GetOnlyPatternParents() { return this->PatternParents; }
 
 	void SetFirstLine (int FirstLine);
 
 	void SetLastLine (int LastLine);
 
+
+	void SetStartSourceLoc(clang::SourceLocation StartLoc);
+
+	void SetEndSourceLoc(clang::SourceLocation EndLoc);
+
+	clang::SourceLocation GetStartLoc();
+
+	clang::SourceLocation GetEndLoc();
+
 	int GetLinesOfCode() { return this->LinesOfCode; }
 
 	std::string GetID() { return this->PatternOcc->GetID(); }
 
+	bool HasNoPatternParents();
+
+	bool HasNoPatternChildren();
+
+	bool isInMain = false;
+
+	void PrintVecOfPattern(std::vector<PatternCodeRegion*> RegionVec);
+
 private:
-	PatternOccurrence* PatternOcc;	
+	PatternOccurrence* PatternOcc;
+
+	clang::SourceLocation SurLoc;
+
+	clang::SourceLocation StartSLocation;
+	clang::SourceLocation EndSLocation;
+
 
 	std::vector<PatternGraphNode*> Parents;
 	std::vector<PatternGraphNode*> Children;
-
+	std::vector<PatternCodeRegion*> PatternParents;
+	std::vector<PatternCodeRegion*> PatternChildren;
 	int LinesOfCode = 0;
 };
 
 
 
 /**
- * The pattern stack is used to keep track of the nesting of patterns.
+ * The pattern stack is used to keep track of the nesting of patterns and functions.
  */
 extern std::stack<PatternCodeRegion*> PatternContext;
+/**
+	*The OnlyPatternContext only keeps track of the nesting of patterns.
+	*/
+extern std::stack<PatternCodeRegion*> OnlyPatternContext;
+
+extern std::vector<PatternOccurrence*> OccStackForHalstead;
 
 void AddToPatternStack(PatternCodeRegion* PatternOcc);
 
+void AddToOnlyPatternStack(PatternCodeRegion* PatternCodeReg);
+
 PatternCodeRegion* GetTopPatternStack();
 
+PatternCodeRegion* GetTopOnlyPatternStack();
+
 void RemoveFromPatternStack(std::string ID);
+
+void RemoveFromOnlyPatternStack(std::string ID);

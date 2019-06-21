@@ -5,6 +5,8 @@
 #include <iostream>
 #include "clang/AST/ODRHash.h"
 
+//#define DEBUG_PATTERNREGISTRATIION
+
 
 /*
  * Function Declaration Database Entry functions
@@ -13,7 +15,7 @@ FunctionNode::FunctionNode (std::string Name, unsigned Hash) : PatternGraphNode(
 {
 	this->FnName = Name;
 	this->Hash = Hash;
-}	
+}
 
 void FunctionNode::AddChild(PatternGraphNode* Child)
 {
@@ -25,7 +27,85 @@ void FunctionNode::AddParent(PatternGraphNode* Parent)
 	Parents.push_back(Parent);
 }
 
+void FunctionNode::AddPatternParent(PatternGraphNode* PatParent)
+{/*Before we add a parent we look if this parent has not been registered already
+	*/
+	PatternCodeRegion* PatternParent = clang::dyn_cast<PatternCodeRegion>(PatParent);
+	for(PatternCodeRegion* PatRegFor : this->PatternParents){
+		if(PatRegFor->GetID() == PatternParent->GetID()) return;
+	}
+	this->PatternParents.push_back(PatternParent);
+}
 
+void FunctionNode::AddPatternParents(std::vector<PatternCodeRegion*> PatternParents){
+	for(PatternCodeRegion* PatParent : PatternParents){
+		this->AddPatternParent(PatParent);
+	}
+}
+
+void FunctionNode::AddPatternChild(PatternGraphNode* PatChild)
+{/*Before we add a child we look if this child has not been registered already
+	*/
+	PatternCodeRegion* PatternChild = clang::dyn_cast<PatternCodeRegion>(PatChild);
+	for(PatternCodeRegion* PatRegFor : this->PatternChildren){
+		if(PatRegFor->GetID() == PatternChild->GetID()) return;
+	}
+	this->PatternChildren.push_back(PatternChild);
+}
+
+std::vector<PatternCodeRegion*> FunctionNode::GetPatternParents()
+{
+	return this->PatternParents;
+}
+
+std::vector<PatternCodeRegion*> FunctionNode::GetPatternChildren()
+{
+	return this->PatternChildren;
+}
+
+bool FunctionNode::HasNoPatternParents(){
+	if(this->PatternParents.size()){
+		return false;
+	}
+	return true;
+}
+
+bool FunctionNode::HasNoPatternChildren(){
+	if(this->PatternChildren.size()){
+		return false;
+	}
+	return true;
+}
+
+void FunctionNode::registerPatChildrenToPatParents(){
+	for(PatternCodeRegion* PChild : this->PatternChildren)
+	{
+		 for(PatternCodeRegion* PParent : this->PatternParents)
+		 {
+			 PParent->AddOnlyPatternChild(PChild);
+			 PChild->AddOnlyPatternParent(PParent);
+			 #ifdef DEBUG_PATTERNREGISTRATIION
+				 HPCParallelPattern* ParentPattern = PParent->GetPatternOccurrence()->GetPattern();
+		 		 std::cout << "\033[36m" << ParentPattern->GetDesignSpaceStr() << ":\33[33m " << ParentPattern->GetPatternName() << "\33[0m";
+				 std::cout << "(" << PParent->GetPatternOccurrence()->GetID() << ")" << " has now the child: " <<std::endl;
+
+					HPCParallelPattern* ChildPattern = PChild->GetPatternOccurrence()->GetPattern();
+				  std::cout << "\033[36m" << ChildPattern->GetDesignSpaceStr() << ":\33[33m " << ChildPattern->GetPatternName() << "\33[0m";
+				  std::cout << "(" << PChild->GetPatternOccurrence()->GetID() << ")" << std::endl;
+			#endif
+		 }
+	}
+}
+
+void FunctionNode::PrintVecOfPattern(std::vector<PatternCodeRegion*> RegionVec)
+{
+		for(PatternCodeRegion* PatReg : RegionVec)
+		{
+			 HPCParallelPattern* Pattern = PatReg->GetPatternOccurrence()->GetPattern();
+			 std::cout << "\033[36m" << Pattern->GetDesignSpaceStr() << ":\33[33m " << Pattern->GetPatternName() << "\33[0m";
+			 std::cout << "(" << PatReg->GetPatternOccurrence()->GetID() << ")" << " has now the child: " <<std::endl;
+		}
+}
 
 PatternGraph::PatternGraph() : Functions(), Patterns(), PatternOccurrences()
 {
@@ -48,6 +128,9 @@ PatternGraphNode* PatternGraph::GetRootNode()
 	return (PatternGraphNode*)Patterns.front();
 }
 
+std::vector<PatternGraphNode*> PatternGraph::GetOnlyPatternRootNodes(){
+		return this->OnlyPatternRootNodes;
+}
 /**
  * @brief Lookup function for the database entry that corresponds to the given function declaration.
  *
@@ -62,13 +145,13 @@ FunctionNode* PatternGraph::GetFunctionNode(clang::FunctionDecl* Decl)
 {
 	clang::ODRHash Hash;
 	Hash.AddDecl(Decl);
-	unsigned HashVal = Hash.CalculateHash();		
+	unsigned HashVal = Hash.CalculateHash();
 
-	std::string FnName = Decl->getNameInfo().getName().getAsString();	
+	std::string FnName = Decl->getNameInfo().getName().getAsString();
 
 	// Search for an existing entry
 	for (FunctionNode* Func : Functions)
-	{	
+	{
 		if (Func->GetHash() == HashVal)
 		{
 			return Func;
@@ -78,6 +161,11 @@ FunctionNode* PatternGraph::GetFunctionNode(clang::FunctionDecl* Decl)
 	return NULL;
 }
 
+
+	void PatternGraph::RegisterOnlyPatternRootNode(PatternCodeRegion* CodeReg)
+	{
+		this->OnlyPatternRootNodes.push_back(CodeReg);
+	}
 /**
  * @brief Registers a function with the database in the PatternGraph.
  *
@@ -101,7 +189,7 @@ bool PatternGraph::RegisterFunction(clang::FunctionDecl* Decl)
 	Hash.AddDecl(Decl);
 	unsigned HashVal = Hash.CalculateHash();
 
-	std::string FnName = Decl->getNameInfo().getName().getAsString();	
+	std::string FnName = Decl->getNameInfo().getName().getAsString();
 
 
 	/* Allocate a new entry */
@@ -145,7 +233,7 @@ HPCParallelPattern* PatternGraph::GetPattern(DesignSpace DesignSp, std::string P
  * @brief Adds a parallel pattern to the database.
  *
  * @param Pattern The parallel pattern that is added.
- * 
+ *
  * @return False if the pattern is already registered. Else, true.
  **/
 bool PatternGraph::RegisterPattern(HPCParallelPattern* Pattern)
@@ -156,7 +244,6 @@ bool PatternGraph::RegisterPattern(HPCParallelPattern* Pattern)
 	}
 
 	Patterns.push_back(Pattern);
-
 	return true;
 }
 
@@ -194,7 +281,7 @@ bool PatternGraph::RegisterPatternOccurrence(PatternOccurrence* PatternOcc)
 	{
 		return false;
 	}
-	
+
 	PatternOccurrences.push_back(PatternOcc);
 
 	return true;

@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <regex>
+//#define PRINT_ONLYPATTERNDENUG
 
 
 /*
@@ -18,7 +19,7 @@ std::regex EndParallelPatternRegex("([[:alnum:]]+)");
  *
  * @param FnEntry The function decl. of the body that is currently analysed.
  **/
-void HPCPatternBeginInstrHandler::SetCurrentFnEntry(FunctionNode* FnEntry) 
+void HPCPatternBeginInstrHandler::SetCurrentFnEntry(FunctionNode* FnEntry)
 {
 	CurrentFnEntry = FnEntry;
 }
@@ -31,23 +32,30 @@ void HPCPatternBeginInstrHandler::SetCurrentFnEntry(FunctionNode* FnEntry)
  *
  * @param Result Match results from the pattern begin matcher.
  **/
+
+ // describes what has to happen if we encounter the beginning of a pattern
 void HPCPatternBeginInstrHandler::run(const clang::ast_matchers::MatchFinder::MatchResult &Result)
 {
-	const clang::StringLiteral* patternstr = Result.Nodes.getNodeAs<clang::StringLiteral>("patternstr");	
+	const clang::StringLiteral* patternstr = Result.Nodes.getNodeAs<clang::StringLiteral>("patternstr");
+
 
 	/* Match Regex and save info*/
 	std::smatch MatchRes;
 	std::string PatternInfoStr = patternstr->getString().str();
+
 	std::regex_search(PatternInfoStr, MatchRes, BeginParallelPatternRegex);
 
 	DesignSpace DesignSp = StrToDesignSpace(MatchRes[1].str());
 	std::string PatternName = MatchRes[2].str();
 	std::string PatternID = MatchRes[3].str();
 
-	
+	//const clang::SourceLocation SurLoc = range.getBegin();
+
+
 	/* Look if a pattern with this Design Space and Name already exists */
 	HPCParallelPattern* Pattern = PatternGraph::GetInstance()->GetPattern(DesignSp, PatternName);
 
+	/*If Pattern does not exist register it.*/
 	if (Pattern == NULL)
 	{
 		Pattern = new HPCParallelPattern(DesignSp, PatternName);
@@ -72,6 +80,9 @@ void HPCPatternBeginInstrHandler::run(const clang::ast_matchers::MatchFinder::Ma
 		}
 	}
 
+	/* register the PatternOcc in the Pattern Stack for the Halstead metric*/
+	OccStackForHalstead.push_back(PatternOcc);
+
 	/* Create a new object for pattern occurrence */
 	PatternCodeRegion* CodeRegion = new PatternCodeRegion(PatternOcc);
 	PatternOcc->AddCodeRegion(CodeRegion);
@@ -79,20 +90,38 @@ void HPCPatternBeginInstrHandler::run(const clang::ast_matchers::MatchFinder::Ma
 
 	/* Connect the child and parent links between the objects */
 	PatternCodeRegion* Top = GetTopPatternStack();
-	
+
 	if (Top != NULL)
 	{
 		Top->AddChild(CodeRegion);
 		CodeRegion->AddParent(Top);
 	}
 	else
-	{	
+	{
 		CurrentFnEntry->AddChild(CodeRegion);
 		CodeRegion->AddParent(CurrentFnEntry);
+
+		/*Register the PatternChildren of the Functions too*/
+		CurrentFnEntry->AddPatternChild(CodeRegion);
+		CurrentFnEntry->registerPatChildrenToPatParents();
 	}
 
 	AddToPatternStack(CodeRegion);
 	LastPattern = CodeRegion;
+
+	PatternCodeRegion* OnlyPatternTop = GetTopOnlyPatternStack();
+
+	if(OnlyPatternTop != NULL)
+	{
+		OnlyPatternTop->AddOnlyPatternChild(CodeRegion);
+		CodeRegion->AddOnlyPatternParent(OnlyPatternTop);
+	}
+	else
+	{
+		PatternGraph::GetInstance()->RegisterOnlyPatternRootNode(CodeRegion);
+	}
+
+	AddToOnlyPatternStack(CodeRegion);
 
 #if PRINT_DEBUG
 	Pattern->Print();
@@ -108,14 +137,19 @@ void HPCPatternBeginInstrHandler::run(const clang::ast_matchers::MatchFinder::Ma
  *
  * @param Result Match results from the pattern end matcher.
  **/
+
+ //defines what has to happen if we encounter the end of an Pattern
 void HPCPatternEndInstrHandler::run(const clang::ast_matchers::MatchFinder::MatchResult &Result)
 {
-	const clang::StringLiteral* patternstr = Result.Nodes.getNodeAs<clang::StringLiteral>("patternstr");	
-	
+	const clang::StringLiteral* patternstr = Result.Nodes.getNodeAs<clang::StringLiteral>("patternstr");
+
 	std::string PatternID = patternstr->getString().str();
 
-	LastPattern = GetTopPatternStack();	
+	LastPattern = GetTopPatternStack();
 	RemoveFromPatternStack(PatternID);
+
+	LastOnlyPattern = GetTopOnlyPatternStack();
+	RemoveFromOnlyPatternStack(PatternID);
 }
 
 /**
@@ -123,7 +157,7 @@ void HPCPatternEndInstrHandler::run(const clang::ast_matchers::MatchFinder::Matc
  *
  * @param FnEntry Current function declaration database entry.
  **/
-void HPCPatternEndInstrHandler::SetCurrentFnEntry(FunctionNode* FnEntry) 
+void HPCPatternEndInstrHandler::SetCurrentFnEntry(FunctionNode* FnEntry)
 {
 	CurrentFnEntry = FnEntry;
 }

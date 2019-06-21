@@ -44,7 +44,7 @@ Therefore, it requires compilation databases in order to obtain the compiler fla
 <b>If you have a CMake project for your source code</b><br>
 1) In your CMakeLists.txt, set the variable "EXPORT_COMPILE_COMMANDS" to 1 or ON: <code>SET(EXPORT_COMPILE_COMMANDS 1)</code><br>
 2) Create/update your build system: <code>mkdir build && cd build && cmake ..</code><br>
-3) Copy compile_commands.json to the directory containing the sources: <code>cp compilation_commands.json path/to/src</code><br>
+3) Copy compile_commands.json to the directory containing the sources: <code>cp compilation_commands.json path/to/src<br>
 
 <b>If you use make (or another build tool) to build your source code</b><br>
 Install the <a href="https://github.com/rizsotto/Bear">Bear Tool</a>.
@@ -63,3 +63,8 @@ You can copy the instrumentation header files to the source directory.
 Alternatively, you can add an include flag using <code>--extra-arg=</code>, e.g. <code>./HPC-pattern-tool /path/to/your/code.cpp --extra-arg=-I/path/to/headers</code> to your tool call.
 <b>If you use cmake</b>, you can instead add the flag to the list of include directories with <code>include_directories(/path/to/headers)</code>.
 Finally, you can also add the <code>-I/path/to/headers</code> flag to the compilation database for the files where the instrumentation header is used.
+<br>
+If you want to see the <b>Patterntree without the function calls </b> you can set the onption -onlyPattern=1. <br>
+<code>./HPC-pattern-tool /path/to/your/code.cpp -onlyPattern=1 --extra-arg=-I/path/to/headers</code><br>
+If you want <b>no tree </b> you can set the onption -noTree=1. <br>
+<code>./HPC-pattern-tool /path/to/your/code.cpp -noTree=1 --extra-arg=-I/path/to/headers</code>
